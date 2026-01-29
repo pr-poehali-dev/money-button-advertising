@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Icon from '@/components/ui/icon';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { toast } from '@/components/ui/use-toast';
 
 export default function Index() {
   const [activeTab, setActiveTab] = useState<'home' | 'profile' | 'achievements' | 'withdraw'>('home');
@@ -12,6 +14,39 @@ export default function Index() {
   const [level, setLevel] = useState(5);
   const [xp, setXp] = useState(350);
   const maxXp = 500;
+  const [showAdDialog, setShowAdDialog] = useState(false);
+  const [adTimer, setAdTimer] = useState(0);
+  const [isWatchingAd, setIsWatchingAd] = useState(false);
+  const [adsWatched, setAdsWatched] = useState(0);
+  const [adCooldown, setAdCooldown] = useState(0);
+
+  const adRewards = [
+    { duration: 5, reward: 15, title: 'Короткая реклама', desc: '5 секунд' },
+    { duration: 15, reward: 50, title: 'Средняя реклама', desc: '15 секунд' },
+    { duration: 30, reward: 120, title: 'Длинная реклама', desc: '30 секунд' },
+  ];
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isWatchingAd && adTimer > 0) {
+      interval = setInterval(() => {
+        setAdTimer(prev => prev - 1);
+      }, 1000);
+    } else if (isWatchingAd && adTimer === 0) {
+      setIsWatchingAd(false);
+    }
+    return () => clearInterval(interval);
+  }, [isWatchingAd, adTimer]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (adCooldown > 0) {
+      interval = setInterval(() => {
+        setAdCooldown(prev => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [adCooldown]);
 
   const handleEarnClick = () => {
     const earnAmount = Math.random() * 5 + 1;
@@ -27,6 +62,38 @@ export default function Index() {
     });
   };
 
+  const handleWatchAd = (duration: number, reward: number) => {
+    if (adCooldown > 0) {
+      toast({
+        title: '⏳ Подожди немного',
+        description: `Следующая реклама через ${adCooldown} сек`,
+        variant: 'destructive'
+      });
+      return;
+    }
+    setAdTimer(duration);
+    setIsWatchingAd(true);
+    setShowAdDialog(false);
+
+    setTimeout(() => {
+      setBalance(prev => parseFloat((prev + reward).toFixed(2)));
+      setAdsWatched(prev => prev + 1);
+      setXp(prev => {
+        const newXp = prev + 25;
+        if (newXp >= maxXp) {
+          setLevel(l => l + 1);
+          return newXp - maxXp;
+        }
+        return newXp;
+      });
+      setAdCooldown(60);
+      toast({
+        title: '💰 Награда получена!',
+        description: `+${reward}₽ за просмотр рекламы`,
+      });
+    }, duration * 1000);
+  };
+
   const achievements = [
     { id: 1, title: 'Новичок', icon: 'Award', desc: 'Заработано 100₽', unlocked: true },
     { id: 2, title: 'Трудяга', icon: 'Zap', desc: '100 кликов', unlocked: true },
@@ -39,7 +106,8 @@ export default function Index() {
     totalEarned: balance + 3450.25,
     totalClicks: clicks + 847,
     daysActive: 12,
-    withdrawals: 3
+    withdrawals: 3,
+    adsWatched: adsWatched + 15
   };
 
   return (
@@ -87,6 +155,29 @@ export default function Index() {
 
           <p className="text-center text-purple-300 text-sm mb-4">Нажми и заработай!</p>
 
+          <Button
+            onClick={() => setShowAdDialog(true)}
+            disabled={adCooldown > 0 || isWatchingAd}
+            className="w-full mb-6 bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white font-bold py-6 text-lg relative overflow-hidden"
+          >
+            {isWatchingAd ? (
+              <>
+                <Icon name="Timer" className="mr-2" size={24} />
+                Просмотр рекламы... {adTimer}с
+              </>
+            ) : adCooldown > 0 ? (
+              <>
+                <Icon name="Clock" className="mr-2" size={24} />
+                Подожди {adCooldown}с
+              </>
+            ) : (
+              <>
+                <Icon name="Play" className="mr-2" size={24} />
+                📺 Смотреть рекламу
+              </>
+            )}
+          </Button>
+
           <div className="grid grid-cols-3 gap-3">
             <Card className="bg-purple-900/30 border-purple-500/30 p-3 text-center">
               <Icon name="TrendingUp" className="mx-auto mb-1 text-green-400" size={20} />
@@ -104,6 +195,19 @@ export default function Index() {
               <p className="font-bold text-sm">3/5</p>
             </Card>
           </div>
+
+          <Card className="bg-gradient-to-r from-green-900/30 to-blue-900/30 border-green-500/30 p-4 mt-6">
+            <div className="flex items-center gap-3">
+              <Icon name="Tv" className="text-green-400" size={32} />
+              <div className="flex-1">
+                <p className="font-semibold text-sm">Реклама просмотрена</p>
+                <p className="text-xs text-purple-300">Всего: {adsWatched} раз</p>
+              </div>
+              <Badge className="bg-green-500/20 text-green-300 border-green-500/50">
+                +{adsWatched * 50}₽
+              </Badge>
+            </div>
+          </Card>
         </div>
       )}
 
@@ -171,6 +275,17 @@ export default function Index() {
                   <div>
                     <p className="text-sm text-purple-300">Дней активности</p>
                     <p className="text-xl font-bold">{stats.daysActive} дней</p>
+                  </div>
+                </div>
+              </div>
+            </Card>
+            <Card className="bg-purple-900/30 border-purple-500/30 p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Icon name="Tv" className="text-green-400" size={24} />
+                  <div>
+                    <p className="text-sm text-purple-300">Реклам просмотрено</p>
+                    <p className="text-xl font-bold">{stats.adsWatched} раз</p>
                   </div>
                 </div>
               </div>
@@ -311,6 +426,66 @@ export default function Index() {
                 </div>
               </Card>
             </div>
+          </div>
+        </div>
+      )}
+
+      <Dialog open={showAdDialog} onOpenChange={setShowAdDialog}>
+        <DialogContent className="bg-gradient-to-br from-purple-900 to-game-dark border-purple-500/50 text-white max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold text-center bg-gradient-to-r from-game-purple to-game-pink bg-clip-text text-transparent">
+              📺 Выбери рекламу
+            </DialogTitle>
+            <DialogDescription className="text-purple-300 text-center">
+              Смотри рекламу и получай награды!
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 mt-4">
+            {adRewards.map((ad, index) => (
+              <Card 
+                key={index}
+                className="bg-purple-900/30 border-purple-500/30 p-4 hover:bg-purple-800/40 transition-all cursor-pointer"
+                onClick={() => handleWatchAd(ad.duration, ad.reward)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-green-500 to-blue-500 flex items-center justify-center">
+                      <Icon name="Play" size={24} />
+                    </div>
+                    <div>
+                      <p className="font-semibold">{ad.title}</p>
+                      <p className="text-xs text-purple-300">{ad.desc}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xl font-bold text-yellow-400">+{ad.reward}₽</p>
+                    <p className="text-xs text-green-400">+25 XP</p>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+          <div className="mt-4 p-3 bg-blue-900/30 border border-blue-500/30 rounded-lg">
+            <p className="text-xs text-blue-300 text-center">
+              ℹ️ После просмотра — перерыв 60 секунд
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {isWatchingAd && (
+        <div className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-32 h-32 mx-auto mb-6 rounded-full bg-gradient-to-br from-green-500 to-blue-500 flex items-center justify-center animate-pulse">
+              <Icon name="Play" size={64} className="text-white" />
+            </div>
+            <h2 className="text-3xl font-bold mb-2">Реклама</h2>
+            <p className="text-purple-300 mb-4">Смотри до конца для награды</p>
+            <div className="text-6xl font-bold bg-gradient-to-r from-yellow-300 to-orange-400 bg-clip-text text-transparent animate-bounce">
+              {adTimer}
+            </div>
+            <p className="text-purple-400 text-sm mt-4">секунд до награды</p>
+            <Progress value={((30 - adTimer) / 30) * 100} className="h-2 mt-6 w-64 mx-auto" />
           </div>
         </div>
       )}
