@@ -5,6 +5,8 @@ import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { toast } from '@/components/ui/use-toast';
 
 export default function Index() {
@@ -19,6 +21,11 @@ export default function Index() {
   const [isWatchingAd, setIsWatchingAd] = useState(false);
   const [adsWatched, setAdsWatched] = useState(0);
   const [adCooldown, setAdCooldown] = useState(0);
+  const [showWithdrawDialog, setShowWithdrawDialog] = useState(false);
+  const [selectedCardType, setSelectedCardType] = useState<'visa' | 'mir' | null>(null);
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardHolder, setCardHolder] = useState('');
+  const [withdrawAmount, setWithdrawAmount] = useState('');
 
   const adRewards = [
     { duration: 5, reward: 15, title: 'Короткая реклама', desc: '5 секунд' },
@@ -92,6 +99,67 @@ export default function Index() {
         description: `+${reward}₽ за просмотр рекламы`,
       });
     }, duration * 1000);
+  };
+
+  const formatCardNumber = (value: string) => {
+    const cleaned = value.replace(/\s/g, '').replace(/\D/g, '');
+    const groups = cleaned.match(/.{1,4}/g);
+    return groups ? groups.join(' ') : cleaned;
+  };
+
+  const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatCardNumber(e.target.value);
+    if (formatted.replace(/\s/g, '').length <= 16) {
+      setCardNumber(formatted);
+    }
+  };
+
+  const handleWithdrawSubmit = () => {
+    const amount = parseFloat(withdrawAmount);
+    if (!cardNumber || cardNumber.replace(/\s/g, '').length !== 16) {
+      toast({
+        title: '❌ Ошибка',
+        description: 'Введите корректный номер карты (16 цифр)',
+        variant: 'destructive'
+      });
+      return;
+    }
+    if (!cardHolder || cardHolder.length < 3) {
+      toast({
+        title: '❌ Ошибка',
+        description: 'Введите имя держателя карты',
+        variant: 'destructive'
+      });
+      return;
+    }
+    if (!amount || amount < 100 || amount > balance) {
+      toast({
+        title: '❌ Ошибка',
+        description: 'Сумма должна быть от 100₽ до доступного баланса',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    const commission = selectedCardType === 'mir' ? 0.015 : 0.02;
+    const finalAmount = amount * (1 - commission);
+    
+    setBalance(prev => prev - amount);
+    setShowWithdrawDialog(false);
+    setCardNumber('');
+    setCardHolder('');
+    setWithdrawAmount('');
+    setSelectedCardType(null);
+    
+    toast({
+      title: '✅ Заявка создана!',
+      description: `Выплата ${finalAmount.toFixed(2)}₽ на карту *${cardNumber.slice(-4)} в обработке`,
+    });
+  };
+
+  const openWithdrawDialog = (type: 'visa' | 'mir') => {
+    setSelectedCardType(type);
+    setShowWithdrawDialog(true);
   };
 
   const achievements = [
@@ -356,7 +424,10 @@ export default function Index() {
           <h3 className="text-lg font-semibold mb-4">Выберите способ вывода</h3>
 
           <div className="grid gap-3 mb-6">
-            <Card className="bg-purple-900/30 border-purple-500/30 p-4 hover:bg-purple-800/40 transition-all cursor-pointer">
+            <Card 
+              className="bg-purple-900/30 border-purple-500/30 p-4 hover:bg-purple-800/40 transition-all cursor-pointer"
+              onClick={() => balance >= 100 && openWithdrawDialog('visa')}
+            >
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-lg bg-blue-600 flex items-center justify-center">
                   <Icon name="CreditCard" size={24} />
@@ -365,10 +436,14 @@ export default function Index() {
                   <p className="font-semibold">Visa / Mastercard</p>
                   <p className="text-xs text-purple-300">Комиссия 2%</p>
                 </div>
+                <Icon name="ChevronRight" className="ml-auto text-purple-400" size={20} />
               </div>
             </Card>
 
-            <Card className="bg-purple-900/30 border-purple-500/30 p-4 hover:bg-purple-800/40 transition-all cursor-pointer">
+            <Card 
+              className="bg-purple-900/30 border-purple-500/30 p-4 hover:bg-purple-800/40 transition-all cursor-pointer"
+              onClick={() => balance >= 100 && openWithdrawDialog('mir')}
+            >
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-green-600 to-blue-600 flex items-center justify-center">
                   <Icon name="CreditCard" size={24} />
@@ -377,16 +452,10 @@ export default function Index() {
                   <p className="font-semibold">МИР</p>
                   <p className="text-xs text-purple-300">Комиссия 1.5%</p>
                 </div>
+                <Icon name="ChevronRight" className="ml-auto text-purple-400" size={20} />
               </div>
             </Card>
           </div>
-
-          <Button 
-            className="w-full bg-gradient-to-r from-game-purple to-game-pink hover:from-purple-600 hover:to-pink-600 text-white font-bold py-6 text-lg"
-            disabled={balance < 100}
-          >
-            {balance < 100 ? '🔒 Недостаточно средств' : '💰 Вывести средства'}
-          </Button>
 
           {balance < 100 && (
             <p className="text-center text-sm text-purple-400 mt-3">
@@ -429,6 +498,87 @@ export default function Index() {
           </div>
         </div>
       )}
+
+      <Dialog open={showWithdrawDialog} onOpenChange={setShowWithdrawDialog}>
+        <DialogContent className="bg-gradient-to-br from-purple-900 to-game-dark border-purple-500/50 text-white max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold text-center bg-gradient-to-r from-game-purple to-game-pink bg-clip-text text-transparent">
+              💳 Вывод средств
+            </DialogTitle>
+            <DialogDescription className="text-purple-300 text-center">
+              {selectedCardType === 'mir' ? 'Карта МИР (комиссия 1.5%)' : 'Visa/Mastercard (комиссия 2%)'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div>
+              <Label htmlFor="cardNumber" className="text-purple-200 mb-2 block">
+                Номер карты
+              </Label>
+              <Input
+                id="cardNumber"
+                placeholder="1234 5678 9012 3456"
+                value={cardNumber}
+                onChange={handleCardNumberChange}
+                className="bg-purple-900/30 border-purple-500/50 text-white placeholder:text-purple-400"
+                maxLength={19}
+              />
+            </div>
+            <div>
+              <Label htmlFor="cardHolder" className="text-purple-200 mb-2 block">
+                Имя держателя карты
+              </Label>
+              <Input
+                id="cardHolder"
+                placeholder="IVAN IVANOV"
+                value={cardHolder}
+                onChange={(e) => setCardHolder(e.target.value.toUpperCase())}
+                className="bg-purple-900/30 border-purple-500/50 text-white placeholder:text-purple-400"
+              />
+            </div>
+            <div>
+              <Label htmlFor="amount" className="text-purple-200 mb-2 block">
+                Сумма вывода
+              </Label>
+              <Input
+                id="amount"
+                type="number"
+                placeholder="100"
+                value={withdrawAmount}
+                onChange={(e) => setWithdrawAmount(e.target.value)}
+                className="bg-purple-900/30 border-purple-500/50 text-white placeholder:text-purple-400"
+                min={100}
+                max={balance}
+              />
+              <p className="text-xs text-purple-400 mt-1">
+                Доступно: {balance.toFixed(2)}₽ | Мин: 100₽
+              </p>
+            </div>
+            {withdrawAmount && parseFloat(withdrawAmount) >= 100 && (
+              <Card className="bg-blue-900/30 border-blue-500/30 p-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-purple-300">Комиссия:</span>
+                  <span className="text-white">
+                    {(parseFloat(withdrawAmount) * (selectedCardType === 'mir' ? 0.015 : 0.02)).toFixed(2)}₽
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm mt-1">
+                  <span className="text-purple-300 font-semibold">Вы получите:</span>
+                  <span className="text-green-400 font-bold">
+                    {(parseFloat(withdrawAmount) * (selectedCardType === 'mir' ? 0.985 : 0.98)).toFixed(2)}₽
+                  </span>
+                </div>
+              </Card>
+            )}
+            <Button
+              onClick={handleWithdrawSubmit}
+              className="w-full bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white font-bold py-6"
+            >
+              <Icon name="Send" className="mr-2" size={20} />
+              Отправить заявку на вывод
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showAdDialog} onOpenChange={setShowAdDialog}>
         <DialogContent className="bg-gradient-to-br from-purple-900 to-game-dark border-purple-500/50 text-white max-w-sm">
