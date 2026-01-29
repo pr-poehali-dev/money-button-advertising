@@ -22,12 +22,12 @@ export default function Index() {
   const [adsWatched, setAdsWatched] = useState(0);
   const [adCooldown, setAdCooldown] = useState(0);
   const [showWithdrawDialog, setShowWithdrawDialog] = useState(false);
-  const [selectedCardType, setSelectedCardType] = useState<'visa' | 'mir' | null>(null);
+  const [selectedCardType, setSelectedCardType] = useState<'visa' | 'mir' | 'sbp' | 'yoomoney' | 'qiwi' | 'sberbank' | null>(null);
   const [cardNumber, setCardNumber] = useState('');
   const [cardHolder, setCardHolder] = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [saveCard, setSaveCard] = useState(true);
-  const [savedCards, setSavedCards] = useState<Array<{id: string, type: 'visa' | 'mir', number: string, holder: string, lastUsed?: string}>>([]);
+  const [savedCards, setSavedCards] = useState<Array<{id: string, type: 'visa' | 'mir' | 'sbp' | 'yoomoney' | 'qiwi' | 'sberbank', number: string, holder: string, lastUsed?: string}>>([]);
   const [selectedSavedCard, setSelectedSavedCard] = useState<string | null>(null);
   const [showManageCards, setShowManageCards] = useState(false);
 
@@ -133,7 +133,8 @@ export default function Index() {
       }
     }
 
-    if (!finalCardNumber || finalCardNumber.replace(/\s/g, '').length !== 16) {
+    const needsCardValidation = finalCardType === 'visa' || finalCardType === 'mir';
+    if (needsCardValidation && (!finalCardNumber || finalCardNumber.replace(/\s/g, '').length !== 16)) {
       toast({
         title: '❌ Ошибка',
         description: 'Введите корректный номер карты (16 цифр)',
@@ -141,7 +142,16 @@ export default function Index() {
       });
       return;
     }
-    if (!finalCardHolder || finalCardHolder.length < 3) {
+    if (!needsCardValidation && (!finalCardNumber || finalCardNumber.length < 5)) {
+      toast({
+        title: '❌ Ошибка',
+        description: 'Введите корректные реквизиты',
+        variant: 'destructive'
+      });
+      return;
+    }
+    const needsHolder = getPaymentMethodInfo(finalCardType || 'visa').needHolder;
+    if (needsHolder && (!finalCardHolder || finalCardHolder.length < 3)) {
       toast({
         title: '❌ Ошибка',
         description: 'Введите имя держателя карты',
@@ -158,7 +168,8 @@ export default function Index() {
       return;
     }
 
-    const commission = finalCardType === 'mir' ? 0.015 : 0.02;
+    const paymentInfo = getPaymentMethodInfo(finalCardType || 'visa');
+    const commission = paymentInfo.commission;
     const finalAmount = amount * (1 - commission);
     
     if (saveCard && !selectedSavedCard && finalCardNumber && finalCardHolder) {
@@ -193,9 +204,21 @@ export default function Index() {
     });
   };
 
-  const openWithdrawDialog = (type: 'visa' | 'mir') => {
+  const openWithdrawDialog = (type: 'visa' | 'mir' | 'sbp' | 'yoomoney' | 'qiwi' | 'sberbank') => {
     setSelectedCardType(type);
     setShowWithdrawDialog(true);
+  };
+
+  const getPaymentMethodInfo = (type: string) => {
+    const info: Record<string, {title: string, desc: string, commission: number, placeholder: string, label: string, needHolder: boolean}> = {
+      visa: { title: 'Visa/Mastercard', desc: 'Комиссия 2%', commission: 0.02, placeholder: '1234 5678 9012 3456', label: 'Номер карты', needHolder: true },
+      mir: { title: 'МИР', desc: 'Комиссия 1.5%', commission: 0.015, placeholder: '1234 5678 9012 3456', label: 'Номер карты', needHolder: true },
+      sbp: { title: 'СБП', desc: 'Комиссия 0.5%', commission: 0.005, placeholder: '+7 (900) 123-45-67', label: 'Номер телефона', needHolder: false },
+      yoomoney: { title: 'ЮMoney', desc: 'Комиссия 3%', commission: 0.03, placeholder: '410012345678901', label: 'Номер кошелька', needHolder: false },
+      qiwi: { title: 'QIWI', desc: 'Комиссия 2.5%', commission: 0.025, placeholder: '+79001234567', label: 'Номер кошелька', needHolder: false },
+      sberbank: { title: 'Сбербанк', desc: 'Комиссия 1%', commission: 0.01, placeholder: '+7 (900) 123-45-67', label: 'Номер телефона', needHolder: false }
+    };
+    return info[type] || info.visa;
   };
 
   const handleSelectSavedCard = (cardId: string) => {
@@ -528,13 +551,45 @@ export default function Index() {
           <div className="grid gap-3 mb-6">
             <Card 
               className="bg-purple-900/30 border-purple-500/30 p-4 hover:bg-purple-800/40 transition-all cursor-pointer"
+              onClick={() => balance >= 100 && openWithdrawDialog('sbp')}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center">
+                  <Icon name="Smartphone" size={24} />
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold">СБП</p>
+                  <p className="text-xs text-purple-300">Комиссия 0.5% • Мгновенно</p>
+                </div>
+                <Icon name="ChevronRight" className="ml-auto text-purple-400" size={20} />
+              </div>
+            </Card>
+
+            <Card 
+              className="bg-purple-900/30 border-purple-500/30 p-4 hover:bg-purple-800/40 transition-all cursor-pointer"
+              onClick={() => balance >= 100 && openWithdrawDialog('sberbank')}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-green-600 to-green-700 flex items-center justify-center">
+                  <Icon name="Building2" size={24} />
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold">Сбербанк</p>
+                  <p className="text-xs text-purple-300">Комиссия 1%</p>
+                </div>
+                <Icon name="ChevronRight" className="ml-auto text-purple-400" size={20} />
+              </div>
+            </Card>
+
+            <Card 
+              className="bg-purple-900/30 border-purple-500/30 p-4 hover:bg-purple-800/40 transition-all cursor-pointer"
               onClick={() => balance >= 100 && openWithdrawDialog('visa')}
             >
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-lg bg-blue-600 flex items-center justify-center">
                   <Icon name="CreditCard" size={24} />
                 </div>
-                <div>
+                <div className="flex-1">
                   <p className="font-semibold">Visa / Mastercard</p>
                   <p className="text-xs text-purple-300">Комиссия 2%</p>
                 </div>
@@ -550,9 +605,41 @@ export default function Index() {
                 <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-green-600 to-blue-600 flex items-center justify-center">
                   <Icon name="CreditCard" size={24} />
                 </div>
-                <div>
+                <div className="flex-1">
                   <p className="font-semibold">МИР</p>
                   <p className="text-xs text-purple-300">Комиссия 1.5%</p>
+                </div>
+                <Icon name="ChevronRight" className="ml-auto text-purple-400" size={20} />
+              </div>
+            </Card>
+
+            <Card 
+              className="bg-purple-900/30 border-purple-500/30 p-4 hover:bg-purple-800/40 transition-all cursor-pointer"
+              onClick={() => balance >= 100 && openWithdrawDialog('yoomoney')}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-600 to-purple-700 flex items-center justify-center">
+                  <Icon name="Wallet" size={24} />
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold">ЮMoney</p>
+                  <p className="text-xs text-purple-300">Комиссия 3%</p>
+                </div>
+                <Icon name="ChevronRight" className="ml-auto text-purple-400" size={20} />
+              </div>
+            </Card>
+
+            <Card 
+              className="bg-purple-900/30 border-purple-500/30 p-4 hover:bg-purple-800/40 transition-all cursor-pointer"
+              onClick={() => balance >= 100 && openWithdrawDialog('qiwi')}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center">
+                  <Icon name="Wallet" size={24} />
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold">QIWI</p>
+                  <p className="text-xs text-purple-300">Комиссия 2.5%</p>
                 </div>
                 <Icon name="ChevronRight" className="ml-auto text-purple-400" size={20} />
               </div>
@@ -608,7 +695,7 @@ export default function Index() {
               💳 Вывод средств
             </DialogTitle>
             <DialogDescription className="text-purple-300 text-center">
-              {selectedCardType === 'mir' ? 'Карта МИР (комиссия 1.5%)' : 'Visa/Mastercard (комиссия 2%)'}
+              {selectedCardType && getPaymentMethodInfo(selectedCardType).title} • {selectedCardType && getPaymentMethodInfo(selectedCardType).desc}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
@@ -662,33 +749,41 @@ export default function Index() {
               </div>
             )}
             
-            {!selectedSavedCard && (
+            {!selectedSavedCard && selectedCardType && (
               <>
                 <div>
                   <Label htmlFor="cardNumber" className="text-purple-200 mb-2 block">
-                    Номер карты
+                    {getPaymentMethodInfo(selectedCardType).label}
                   </Label>
                   <Input
                     id="cardNumber"
-                    placeholder="1234 5678 9012 3456"
+                    placeholder={getPaymentMethodInfo(selectedCardType).placeholder}
                     value={cardNumber}
-                    onChange={handleCardNumberChange}
+                    onChange={(e) => {
+                      if (selectedCardType === 'visa' || selectedCardType === 'mir') {
+                        handleCardNumberChange(e);
+                      } else {
+                        setCardNumber(e.target.value);
+                      }
+                    }}
                     className="bg-purple-900/30 border-purple-500/50 text-white placeholder:text-purple-400"
-                    maxLength={19}
+                    maxLength={selectedCardType === 'visa' || selectedCardType === 'mir' ? 19 : undefined}
                   />
                 </div>
-                <div>
-                  <Label htmlFor="cardHolder" className="text-purple-200 mb-2 block">
-                    Имя держателя карты
-                  </Label>
-                  <Input
-                    id="cardHolder"
-                    placeholder="IVAN IVANOV"
-                    value={cardHolder}
-                    onChange={(e) => setCardHolder(e.target.value.toUpperCase())}
-                    className="bg-purple-900/30 border-purple-500/50 text-white placeholder:text-purple-400"
-                  />
-                </div>
+                {getPaymentMethodInfo(selectedCardType).needHolder && (
+                  <div>
+                    <Label htmlFor="cardHolder" className="text-purple-200 mb-2 block">
+                      Имя держателя карты
+                    </Label>
+                    <Input
+                      id="cardHolder"
+                      placeholder="IVAN IVANOV"
+                      value={cardHolder}
+                      onChange={(e) => setCardHolder(e.target.value.toUpperCase())}
+                      className="bg-purple-900/30 border-purple-500/50 text-white placeholder:text-purple-400"
+                    />
+                  </div>
+                )}
                 <div className="flex items-center space-x-2 bg-purple-900/20 p-3 rounded-lg">
                   <input
                     type="checkbox"
@@ -698,7 +793,7 @@ export default function Index() {
                     className="w-4 h-4 rounded border-purple-500 bg-purple-900/30 text-purple-600 focus:ring-purple-500"
                   />
                   <Label htmlFor="saveCard" className="text-purple-200 text-sm cursor-pointer">
-                    💾 Сохранить карту для быстрых выводов
+                    💾 Сохранить реквизиты для быстрых выводов
                   </Label>
                 </div>
               </>
@@ -721,18 +816,18 @@ export default function Index() {
                 Доступно: {balance.toFixed(2)}₽ | Мин: 100₽
               </p>
             </div>
-            {withdrawAmount && parseFloat(withdrawAmount) >= 100 && (
+            {withdrawAmount && parseFloat(withdrawAmount) >= 100 && selectedCardType && (
               <Card className="bg-blue-900/30 border-blue-500/30 p-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-purple-300">Комиссия:</span>
                   <span className="text-white">
-                    {(parseFloat(withdrawAmount) * (selectedCardType === 'mir' ? 0.015 : 0.02)).toFixed(2)}₽
+                    {(parseFloat(withdrawAmount) * getPaymentMethodInfo(selectedCardType).commission).toFixed(2)}₽
                   </span>
                 </div>
                 <div className="flex justify-between text-sm mt-1">
                   <span className="text-purple-300 font-semibold">Вы получите:</span>
                   <span className="text-green-400 font-bold">
-                    {(parseFloat(withdrawAmount) * (selectedCardType === 'mir' ? 0.985 : 0.98)).toFixed(2)}₽
+                    {(parseFloat(withdrawAmount) * (1 - getPaymentMethodInfo(selectedCardType).commission)).toFixed(2)}₽
                   </span>
                 </div>
               </Card>
