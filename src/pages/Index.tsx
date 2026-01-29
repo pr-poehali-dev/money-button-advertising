@@ -26,6 +26,10 @@ export default function Index() {
   const [cardNumber, setCardNumber] = useState('');
   const [cardHolder, setCardHolder] = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [saveCard, setSaveCard] = useState(true);
+  const [savedCards, setSavedCards] = useState<Array<{id: string, type: 'visa' | 'mir', number: string, holder: string, lastUsed?: string}>>([]);
+  const [selectedSavedCard, setSelectedSavedCard] = useState<string | null>(null);
+  const [showManageCards, setShowManageCards] = useState(false);
 
   const adRewards = [
     { duration: 5, reward: 15, title: 'Короткая реклама', desc: '5 секунд' },
@@ -116,7 +120,20 @@ export default function Index() {
 
   const handleWithdrawSubmit = () => {
     const amount = parseFloat(withdrawAmount);
-    if (!cardNumber || cardNumber.replace(/\s/g, '').length !== 16) {
+    let finalCardNumber = cardNumber;
+    let finalCardHolder = cardHolder;
+    let finalCardType = selectedCardType;
+
+    if (selectedSavedCard) {
+      const card = savedCards.find(c => c.id === selectedSavedCard);
+      if (card) {
+        finalCardNumber = card.number;
+        finalCardHolder = card.holder;
+        finalCardType = card.type;
+      }
+    }
+
+    if (!finalCardNumber || finalCardNumber.replace(/\s/g, '').length !== 16) {
       toast({
         title: '❌ Ошибка',
         description: 'Введите корректный номер карты (16 цифр)',
@@ -124,7 +141,7 @@ export default function Index() {
       });
       return;
     }
-    if (!cardHolder || cardHolder.length < 3) {
+    if (!finalCardHolder || finalCardHolder.length < 3) {
       toast({
         title: '❌ Ошибка',
         description: 'Введите имя держателя карты',
@@ -141,8 +158,25 @@ export default function Index() {
       return;
     }
 
-    const commission = selectedCardType === 'mir' ? 0.015 : 0.02;
+    const commission = finalCardType === 'mir' ? 0.015 : 0.02;
     const finalAmount = amount * (1 - commission);
+    
+    if (saveCard && !selectedSavedCard && finalCardNumber && finalCardHolder) {
+      const newCard = {
+        id: Date.now().toString(),
+        type: finalCardType!,
+        number: finalCardNumber,
+        holder: finalCardHolder,
+        lastUsed: new Date().toISOString()
+      };
+      setSavedCards(prev => [...prev, newCard]);
+    } else if (selectedSavedCard) {
+      setSavedCards(prev => prev.map(card => 
+        card.id === selectedSavedCard 
+          ? { ...card, lastUsed: new Date().toISOString() }
+          : card
+      ));
+    }
     
     setBalance(prev => prev - amount);
     setShowWithdrawDialog(false);
@@ -150,16 +184,40 @@ export default function Index() {
     setCardHolder('');
     setWithdrawAmount('');
     setSelectedCardType(null);
+    setSelectedSavedCard(null);
+    setSaveCard(true);
     
     toast({
       title: '✅ Заявка создана!',
-      description: `Выплата ${finalAmount.toFixed(2)}₽ на карту *${cardNumber.slice(-4)} в обработке`,
+      description: `Выплата ${finalAmount.toFixed(2)}₽ на карту *${finalCardNumber.slice(-4)} в обработке`,
     });
   };
 
   const openWithdrawDialog = (type: 'visa' | 'mir') => {
     setSelectedCardType(type);
     setShowWithdrawDialog(true);
+  };
+
+  const handleSelectSavedCard = (cardId: string) => {
+    setSelectedSavedCard(cardId);
+    const card = savedCards.find(c => c.id === cardId);
+    if (card) {
+      setCardNumber(card.number);
+      setCardHolder(card.holder);
+    }
+  };
+
+  const handleDeleteCard = (cardId: string) => {
+    setSavedCards(prev => prev.filter(c => c.id !== cardId));
+    if (selectedSavedCard === cardId) {
+      setSelectedSavedCard(null);
+      setCardNumber('');
+      setCardHolder('');
+    }
+    toast({
+      title: '🗑️ Карта удалена',
+      description: 'Карта успешно удалена из профиля',
+    });
   };
 
   const achievements = [
@@ -359,6 +417,50 @@ export default function Index() {
               </div>
             </Card>
           </div>
+
+          {savedCards.length > 0 && (
+            <div className="mt-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold">Мои карты</h3>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowManageCards(true)}
+                  className="bg-purple-900/30 border-purple-500/50 text-purple-200 hover:bg-purple-800/40"
+                >
+                  <Icon name="Settings" size={16} className="mr-1" />
+                  Управление
+                </Button>
+              </div>
+              <div className="grid gap-3">
+                {savedCards.slice(0, 2).map((card) => (
+                  <Card key={card.id} className="bg-purple-900/30 border-purple-500/30 p-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
+                        card.type === 'mir' 
+                          ? 'bg-gradient-to-br from-green-600 to-blue-600' 
+                          : 'bg-blue-600'
+                      }`}>
+                        <Icon name="CreditCard" size={24} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold">{card.type === 'mir' ? 'МИР' : 'Visa/MC'} •••• {card.number.slice(-4)}</p>
+                        <p className="text-xs text-purple-300">{card.holder}</p>
+                      </div>
+                      <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/50 text-xs">
+                        Сохранена
+                      </Badge>
+                    </div>
+                  </Card>
+                ))}
+                {savedCards.length > 2 && (
+                  <p className="text-center text-sm text-purple-400">
+                    +{savedCards.length - 2} карт
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -510,31 +612,97 @@ export default function Index() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
-            <div>
-              <Label htmlFor="cardNumber" className="text-purple-200 mb-2 block">
-                Номер карты
-              </Label>
-              <Input
-                id="cardNumber"
-                placeholder="1234 5678 9012 3456"
-                value={cardNumber}
-                onChange={handleCardNumberChange}
-                className="bg-purple-900/30 border-purple-500/50 text-white placeholder:text-purple-400"
-                maxLength={19}
-              />
-            </div>
-            <div>
-              <Label htmlFor="cardHolder" className="text-purple-200 mb-2 block">
-                Имя держателя карты
-              </Label>
-              <Input
-                id="cardHolder"
-                placeholder="IVAN IVANOV"
-                value={cardHolder}
-                onChange={(e) => setCardHolder(e.target.value.toUpperCase())}
-                className="bg-purple-900/30 border-purple-500/50 text-white placeholder:text-purple-400"
-              />
-            </div>
+            {savedCards.length > 0 && (
+              <div>
+                <Label className="text-purple-200 mb-2 block">
+                  Сохраненные карты
+                </Label>
+                <div className="grid gap-2 mb-3">
+                  {savedCards.filter(c => c.type === selectedCardType).map((card) => (
+                    <Card
+                      key={card.id}
+                      className={`p-3 cursor-pointer transition-all ${
+                        selectedSavedCard === card.id
+                          ? 'bg-purple-700/50 border-purple-400'
+                          : 'bg-purple-900/30 border-purple-500/30 hover:bg-purple-800/40'
+                      }`}
+                      onClick={() => handleSelectSavedCard(card.id)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Icon 
+                            name={card.type === 'mir' ? 'CreditCard' : 'CreditCard'} 
+                            className={card.type === 'mir' ? 'text-green-400' : 'text-blue-400'} 
+                            size={20} 
+                          />
+                          <div>
+                            <p className="font-semibold text-sm">•••• {card.number.slice(-4)}</p>
+                            <p className="text-xs text-purple-300">{card.holder}</p>
+                          </div>
+                        </div>
+                        {selectedSavedCard === card.id && (
+                          <Icon name="Check" className="text-green-400" size={20} />
+                        )}
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedSavedCard(null);
+                    setCardNumber('');
+                    setCardHolder('');
+                  }}
+                  className="w-full bg-purple-900/30 border-purple-500/50 text-purple-200 hover:bg-purple-800/40 mb-3"
+                >
+                  + Использовать новую карту
+                </Button>
+              </div>
+            )}
+            
+            {!selectedSavedCard && (
+              <>
+                <div>
+                  <Label htmlFor="cardNumber" className="text-purple-200 mb-2 block">
+                    Номер карты
+                  </Label>
+                  <Input
+                    id="cardNumber"
+                    placeholder="1234 5678 9012 3456"
+                    value={cardNumber}
+                    onChange={handleCardNumberChange}
+                    className="bg-purple-900/30 border-purple-500/50 text-white placeholder:text-purple-400"
+                    maxLength={19}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cardHolder" className="text-purple-200 mb-2 block">
+                    Имя держателя карты
+                  </Label>
+                  <Input
+                    id="cardHolder"
+                    placeholder="IVAN IVANOV"
+                    value={cardHolder}
+                    onChange={(e) => setCardHolder(e.target.value.toUpperCase())}
+                    className="bg-purple-900/30 border-purple-500/50 text-white placeholder:text-purple-400"
+                  />
+                </div>
+                <div className="flex items-center space-x-2 bg-purple-900/20 p-3 rounded-lg">
+                  <input
+                    type="checkbox"
+                    id="saveCard"
+                    checked={saveCard}
+                    onChange={(e) => setSaveCard(e.target.checked)}
+                    className="w-4 h-4 rounded border-purple-500 bg-purple-900/30 text-purple-600 focus:ring-purple-500"
+                  />
+                  <Label htmlFor="saveCard" className="text-purple-200 text-sm cursor-pointer">
+                    💾 Сохранить карту для быстрых выводов
+                  </Label>
+                </div>
+              </>
+            )}
             <div>
               <Label htmlFor="amount" className="text-purple-200 mb-2 block">
                 Сумма вывода
@@ -619,6 +787,65 @@ export default function Index() {
             <p className="text-xs text-blue-300 text-center">
               ℹ️ После просмотра — перерыв 60 секунд
             </p>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showManageCards} onOpenChange={setShowManageCards}>
+        <DialogContent className="bg-gradient-to-br from-purple-900 to-game-dark border-purple-500/50 text-white max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold text-center bg-gradient-to-r from-game-purple to-game-pink bg-clip-text text-transparent">
+              💳 Управление картами
+            </DialogTitle>
+            <DialogDescription className="text-purple-300 text-center">
+              Всего сохранено: {savedCards.length} {savedCards.length === 1 ? 'карта' : 'карт'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 mt-4 max-h-96 overflow-y-auto">
+            {savedCards.length === 0 ? (
+              <div className="text-center py-8">
+                <Icon name="CreditCard" className="mx-auto mb-3 text-purple-400" size={48} />
+                <p className="text-purple-300">Нет сохраненных карт</p>
+                <p className="text-sm text-purple-400 mt-2">
+                  Добавьте карту при выводе средств
+                </p>
+              </div>
+            ) : (
+              savedCards.map((card) => (
+                <Card key={card.id} className="bg-purple-900/30 border-purple-500/30 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                        card.type === 'mir' 
+                          ? 'bg-gradient-to-br from-green-600 to-blue-600' 
+                          : 'bg-blue-600'
+                      }`}>
+                        <Icon name="CreditCard" size={20} />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-sm">
+                          {card.type === 'mir' ? 'МИР' : 'Visa/MC'} •••• {card.number.slice(-4)}
+                        </p>
+                        <p className="text-xs text-purple-300">{card.holder}</p>
+                        {card.lastUsed && (
+                          <p className="text-xs text-purple-400 mt-1">
+                            Последний вывод: {new Date(card.lastUsed).toLocaleDateString('ru-RU')}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteCard(card.id)}
+                      className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                    >
+                      <Icon name="Trash2" size={18} />
+                    </Button>
+                  </div>
+                </Card>
+              ))
+            )}
           </div>
         </DialogContent>
       </Dialog>
